@@ -1,0 +1,108 @@
+services:
+  # --- RabbitMQ Nodes (기존 유지) ---
+  rabbitmq:
+    image: rabbitmq:4.0.8-management
+    container_name: rabbit1
+    hostname: rabbit1
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+      - "15692:15692" # Prometheus exporter
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "MY_SECRET_COOKIE"
+      RABBITMQ_NODENAME: rabbit@rabbit1
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbit1_data:/var/lib/rabbitmq
+    networks:
+      - rabbit_net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbit2:
+    image: rabbitmq:4.0.8-management
+    container_name: rabbit2
+    hostname: rabbit2
+    ports:
+      - "15692" # exporter만 열기
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "MY_SECRET_COOKIE"
+      RABBITMQ_NODENAME: rabbit@rabbit2
+    volumes:
+      - rabbit2_data:/var/lib/rabbitmq
+    networks:
+      - rabbit_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      sh -c "
+        rabbitmq-server -detached &&
+        sleep 10 &&
+        rabbitmqctl stop_app &&
+        rabbitmqctl join_cluster rabbit@rabbit1 &&
+        rabbitmqctl start_app &&
+        tail -f /dev/null
+      "
+
+  rabbit3:
+    image: rabbitmq:4.0.8-management
+    container_name: rabbit3
+    hostname: rabbit3
+    ports:
+      - "15692"
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "MY_SECRET_COOKIE"
+      RABBITMQ_NODENAME: rabbit@rabbit3
+    volumes:
+      - rabbit3_data:/var/lib/rabbitmq
+    networks:
+      - rabbit_net
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    command: >
+      sh -c "
+        rabbitmq-server -detached &&
+        sleep 10 &&
+        rabbitmqctl stop_app &&
+        rabbitmqctl join_cluster rabbit@rabbit1 &&
+        rabbitmqctl start_app &&
+        tail -f /dev/null
+      "
+
+  # --- Prometheus ---
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - rabbit_net
+
+  # --- Grafana ---
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - rabbit_net
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+
+volumes:
+  rabbit1_data:
+  rabbit2_data:
+  rabbit3_data:
+
+networks:
+  rabbit_net:
+    driver: bridge

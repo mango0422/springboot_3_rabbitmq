@@ -1,0 +1,26 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  application:
+    name: rabbit
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    listener:
+      simple:
+        auto-startup: true
+        concurrency: 1
+        max-concurrency: 10
+        prefetch: 1
+        default-requeue-rejected: false
+    queue:
+      name: sample-queue
+    exchange:
+      name: sample-exchange
+    routing:
+      key: key
+server:
+  port: 8080
